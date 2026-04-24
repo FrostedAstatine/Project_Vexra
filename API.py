@@ -60,7 +60,7 @@ def chat_with_vexra(user_message, memory):
         json={
             "model": MODEL_NAME,
             "messages": messages,
-            "temperature": 0.9,
+            "temperature": 0.85,
             "max_tokens": 500,
             "stream": True
         },
