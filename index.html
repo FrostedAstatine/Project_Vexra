@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vexra</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: sans-serif; background: #0f0f1a; color: white; margin: 0; padding: 20px; }
+        .chat { max-width: 600px; margin: 0 auto; }
+        .msg { margin: 10px 0; padding: 10px; border-radius: 10px; }
+        .user { background: #6366f1; text-align: right; }
+        .vexra { background: #2a2a3a; }
+        input { width: 75%; padding: 10px; margin: 10px 0; }
+        button { padding: 10px 20px; background: #6366f1; color: white; border: none; cursor: pointer; }
+        #messages { height: 400px; overflow-y: auto; margin-bottom: 20px; }
+        .facts { font-size: 12px; margin-bottom: 10px; cursor: pointer; color: #a78bfa; }
+    </style>
+</head>
+<body>
+    <div class="chat">
+        <h2>Vexra</h2>
+        <div class="facts" onclick="showFacts()">📝 facts</div>
+        <div id="messages"></div>
+        <input type="text" id="msg" placeholder="Type here..." autofocus>
+        <button onclick="send()">Send</button>
+    </div>
+    <script>
+        const messagesDiv = document.getElementById('messages');
+        const msgInput = document.getElementById('msg');
+        
+        function addMessage(role, text) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + role;
+            div.innerHTML = '<b>' + (role == 'user' ? 'You' : 'Vexra') + ':</b> ' + text;
+            messagesDiv.appendChild(div);
+            div.scrollIntoView();
+        }
+        
+        async function send() {
+            const msg = msgInput.value.trim();
+            if (!msg) return;
+            
+            addMessage('user', msg);
+            msgInput.value = '';
+            
+            const formData = new FormData();
+            formData.append('message', msg);
+            
+            const res = await fetch('/chat', { method: 'POST', body: formData });
+            const data = await res.json();
+            addMessage('vexra', data.reply);
+        }
+        
+        async function showFacts() {
+            const res = await fetch('/facts');
+            const data = await res.json();
+            alert('Facts I remember:\n' + JSON.stringify(data.facts, null, 2));
+        }
+        
+        msgInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') send(); });
+    </script>
+</body>
+</html>
