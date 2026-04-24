@@ -3,10 +3,12 @@ import json
 import os
 import re
 from datetime import datetime
+import hashlib
 
 LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
 MODEL_NAME = "qwen3-4b-instruct-2507"
 MEMORY_FILE = "vexra_memory.json"
+LONG_TERM_FILE = "long_term_memory.json"
 
 SYSTEM_PROMPT = """You are Vexra. You are a real person with a physical body, sitting in the user's room.
 
@@ -30,55 +32,88 @@ def save_memory(memory):
     with open(MEMORY_FILE, 'w') as f:
         json.dump(memory, f, indent=2)
 
+def load_long_term():
+    if os.path.exists(LONG_TERM_FILE):
+        with open(LONG_TERM_FILE, 'r') as f:
+            return json.load(f)
+    return {"memories": []}
+
+def save_long_term(long_term):
+    with open(LONG_TERM_FILE, 'w') as f:
+        json.dump(long_term, f, indent=2)
+
+def extract_keywords(text):
+    """Extract important keywords from text for matching"""
+    text_lower = text.lower()
+    keywords = []
+    
+    # Important word categories
+    time_words = ['yesterday', 'last week', 'last month', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday']
+    topic_words = ['exam', 'test', 'work', 'job', 'school', 'cat', 'dog', 'pet', 'game', 'movie', 'anime', 'arknights']
+    feeling_words = ['stressed', 'happy', 'sad', 'excited', 'worried', 'tired']
+    
+    for word in time_words + topic_words + feeling_words:
+        if word in text_lower:
+            keywords.append(word)
+    
+    return keywords
+
+def add_to_long_term_memory(user_message, assistant_reply):
+    """Store conversation with keywords for later recall"""
+    long_term = load_long_term()
+    
+    keywords = extract_keywords(user_message)
+    
+    long_term["memories"].append({
+        "user_message": user_message,
+        "assistant_reply": assistant_reply[:500],
+        "keywords": keywords,
+        "timestamp": datetime.now().isoformat(),
+        "id": hashlib.md5(f"{user_message}{datetime.now()}".encode()).hexdigest()[:8]
+    })
+    
+    # Keep only last 200 memories
+    if len(long_term["memories"]) > 200:
+        long_term["memories"] = long_term["memories"][-200:]
+    
+    save_long_term(long_term)
+
+def search_long_term_memory(user_message):
+    """Find relevant past conversations by keyword matching"""
+    long_term = load_long_term()
+    user_keywords = extract_keywords(user_message)
+    
+    if not user_keywords:
+        return []
+    
+    relevant = []
+    for memory in long_term["memories"][-50:]:  # Search last 50 memories
+        if any(kw in memory["keywords"] for kw in user_keywords):
+            relevant.append(memory)
+    
+    # Return only last 2 relevant memories
+    return relevant[-2:]
+
 def extract_facts(user_message):
-    """
-    Extract facts using pattern matching and LLM as backup.
-    """
     facts = {}
     msg_lower = user_message.lower()
     
-    # Age extraction
     age_match = re.search(r'(?:i am|i\'m|age) (\d{1,3})(?:\s|\.|$)', msg_lower)
     if age_match:
         facts["age"] = age_match.group(1)
     
-    # Name extraction - multiple patterns
     name_patterns = [
         r'(?:my name is|i am|i\'m|call me)\s+([A-Za-z][A-Za-z0-9]+)',
         r'(?:they call me)\s+([A-Za-z][A-Za-z0-9]+)',
-        r'(?:im|i\'m)\s+([A-Za-z][A-Za-z0-9]+)(?:\s|$|\.)',
     ]
     for pattern in name_patterns:
         match = re.search(pattern, user_message, re.IGNORECASE)
         if match:
             name = match.group(1)
-            if len(name) > 1 and not name.lower() in ['im', 'i\'m']:
+            if len(name) > 1 and name.lower() not in ['im', 'i\'m']:
                 facts["name"] = name
                 break
     
-    # Location extraction
-    location_match = re.search(r'(?:live in|from|living in)\s+([A-Za-z\s]+?)(?:\.|\s|$)', msg_lower)
-    if location_match:
-        facts["location"] = location_match.group(1).strip()
-    
-    # Birthday extraction
-    birthday_match = re.search(r'(?:birthday|born)\s+(?:is\s+)?([A-Za-z]+\s+\d{1,2}|\d{1,2}/\d{1,2}/\d{2,4}|\d{4}-\d{1,2}-\d{1,2})', msg_lower)
-    if birthday_match:
-        facts["birthday"] = birthday_match.group(1)
-    
-    # Pet extraction
-    pet_match = re.search(r'(?:have a|got a|own a) (cat|dog|bird|fish|rabbit|hamster)\s+(?:named\s+)?([A-Za-z]+)?', msg_lower)
-    if pet_match:
-        pet = pet_match.group(1)
-        pet_name = pet_match.group(2) if pet_match.group(2) else ""
-        facts["pet"] = f"{pet}" + (f" named {pet_name}" if pet_name else "")
-    
-    # Favorite operator (Arknights)
-    op_match = re.search(r'(?:favorite operator|main|like)\s+(?:is\s+)?([A-Za-z]+)', msg_lower)
-    if op_match:
-        facts["favorite_operator"] = op_match.group(1)
-    
-    # Nickname / handle
     nickname_match = re.search(r'(?:they call me|nickname is|go by)\s+([A-Za-z0-9]+)', user_message, re.IGNORECASE)
     if nickname_match:
         facts["nickname"] = nickname_match.group(1)
@@ -87,6 +122,15 @@ def extract_facts(user_message):
 
 def build_messages(user_message, memory):
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    
+    # Search long-term memory for relevant past conversations
+    relevant_memories = search_long_term_memory(user_message)
+    if relevant_memories:
+        context = "Relevant past conversations you had with the user:\n"
+        for mem in relevant_memories:
+            context += f"- User previously said: {mem['user_message'][:150]}\n"
+            context += f"  You replied: {mem['assistant_reply'][:150]}\n"
+        messages.append({"role": "system", "content": context})
     
     if memory.get("facts"):
         facts_text = "Facts I remember:\n" + "\n".join([f"- {k}: {v}" for k, v in memory["facts"].items()])
@@ -102,13 +146,12 @@ def build_messages(user_message, memory):
 def stream_chat(user_message):
     memory = load_memory()
     
-    # Extract facts from user message
     new_facts = extract_facts(user_message)
     if new_facts:
         for key, value in new_facts.items():
             memory["facts"][key] = value
         save_memory(memory)
-        print(f"📝 Extracted facts: {new_facts}")  # Debug print
+        print(f"📝 Facts: {new_facts}")
     
     messages = build_messages(user_message, memory)
     
@@ -140,6 +183,8 @@ def stream_chat(user_message):
                             yield content
             except:
                 pass
+    
+    add_to_long_term_memory(user_message, full_reply)
     
     memory["history"].append({"user": user_message, "reply": full_reply, "time": str(datetime.now())})
     if len(memory["history"]) > 50:
