@@ -9,10 +9,11 @@
         .msg { margin: 10px 0; padding: 10px; border-radius: 10px; }
         .user { background: #6366f1; text-align: right; }
         .vexra { background: #2a2a3a; }
-        input { width: 75%; padding: 10px; margin: 10px 0; }
+        input { width: 70%; padding: 10px; }
         button { padding: 10px 20px; background: #6366f1; color: white; border: none; cursor: pointer; }
         #messages { height: 400px; overflow-y: auto; margin-bottom: 20px; }
         .facts { font-size: 12px; margin-bottom: 10px; cursor: pointer; color: #a78bfa; }
+        .thinking { opacity: 0.6; font-style: italic; }
     </style>
 </head>
 <body>
@@ -26,6 +27,8 @@
     <script>
         const messagesDiv = document.getElementById('messages');
         const msgInput = document.getElementById('msg');
+        let currentStreamDiv = null;
+        let currentStreamSpan = null;
         
         function addMessage(role, text) {
             const div = document.createElement('div');
@@ -35,19 +38,75 @@
             div.scrollIntoView();
         }
         
+        function startStreamingMessage() {
+            currentStreamDiv = document.createElement('div');
+            currentStreamDiv.className = 'msg vexra';
+            currentStreamDiv.innerHTML = '<b>Vexra:</b> <span></span><span class="thinking">▊</span>';
+            messagesDiv.appendChild(currentStreamDiv);
+            currentStreamSpan = currentStreamDiv.querySelector('span');
+            return currentStreamSpan;
+        }
+        
+        function appendToStream(text) {
+            if (currentStreamSpan) {
+                currentStreamSpan.innerText += text;
+                currentStreamDiv.scrollIntoView();
+            }
+        }
+        
+        function endStreamingMessage() {
+            if (currentStreamDiv) {
+                const thinkingSpan = currentStreamDiv.querySelector('.thinking');
+                if (thinkingSpan) thinkingSpan.remove();
+                currentStreamDiv = null;
+                currentStreamSpan = null;
+            }
+        }
+        
         async function send() {
             const msg = msgInput.value.trim();
             if (!msg) return;
-            
             addMessage('user', msg);
             msgInput.value = '';
+            
+            startStreamingMessage();
             
             const formData = new FormData();
             formData.append('message', msg);
             
-            const res = await fetch('/chat', { method: 'POST', body: formData });
-            const data = await res.json();
-            addMessage('vexra', data.reply);
+            try {
+                const response = await fetch('/chat', { method: 'POST', body: formData });
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                let buffer = '';
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            if (data === '[DONE]') continue;
+                            try {
+                                const parsed = JSON.parse(data);
+                                if (parsed.content) {
+                                    appendToStream(parsed.content);
+                                }
+                            } catch(e) {}
+                        }
+                    }
+                }
+            } catch (error) {
+                appendToStream('[Error connecting to server]');
+            }
+            
+            endStreamingMessage();
         }
         
         async function showFacts() {
