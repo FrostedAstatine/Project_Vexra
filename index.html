@@ -10,7 +10,7 @@
         .user { background: #6366f1; text-align: right; }
         .vexra { background: #2a2a3a; }
         input { width: 70%; padding: 10px; }
-        button { padding: 10px 20px; background: #6366f1; color: white; border: none; cursor: pointer; }
+        button { padding: 10px 20px; background: #0f2fbd; color: white; border: none; cursor: pointer; }
         #messages { height: 400px; overflow-y: auto; margin-bottom: 20px; }
         .facts { font-size: 12px; margin-bottom: 10px; cursor: pointer; color: #a78bfa; }
         .thinking { opacity: 0.6; font-style: italic; }
@@ -19,7 +19,7 @@
 <body>
     <div class="chat">
         <h2>Vexra</h2>
-        <div class="facts" onclick="showFacts()">📝 facts</div>
+        
         <div id="messages"></div>
         <input type="text" id="msg" placeholder="Type here..." autofocus>
         <button onclick="send()">Send</button>
@@ -119,3 +119,13 @@
     </script>
 </body>
 </html>
+<script>
+    // Load greeting from server
+    fetch('/greeting')
+        .then(res => res.json())
+        .then(data => {
+            if (data.greeting && document.getElementById('messages').children.length === 0) {
+                addMessage('vexra', data.greeting);
+            }
+        });
+</script>
