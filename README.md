@@ -54,7 +54,7 @@ Download from lmstudio.ai and load a model.
 
 **3. Run Vexra**
 
-    git clone https://github.com/yourusername/vexra-core.git
+    git clone https://github.com/FrostedAstatine/Project_Vexra.git
     cd vexra-core
     pip install -r requirements.txt
     open core.py and change MODEL_NAME to whatever the LLM you are using
