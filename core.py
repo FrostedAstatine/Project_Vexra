@@ -24,7 +24,7 @@ def load_persona():
     if os.path.exists(PERSONA_FILE):
         with open(PERSONA_FILE, 'r', encoding='utf-8') as f:
             persona = json.load(f)
-            # Merge with defaults
+
             for key, value in default_persona.items():
                 if key not in persona:
                     persona[key] = value
@@ -53,7 +53,7 @@ def get_greeting():
     persona = load_persona()
     return persona.get('greeting', "*looks up* Hey.")
 
-# Memory functions
+
 os.makedirs("memory", exist_ok=True)
 
 def load_memory():

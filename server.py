@@ -13,7 +13,6 @@ async def serve_chat():
     if os.path.exists(html_path):
         with open(html_path, 'r', encoding='utf-8') as f:
             html = f.read()
-            # Inject greeting into the page
             greeting = get_greeting()
             html = html.replace("__GREETING__", greeting)
             return HTMLResponse(content=html)
