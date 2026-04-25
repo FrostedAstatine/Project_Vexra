@@ -50,12 +50,14 @@ Download from lmstudio.ai and load a model.
 - Load your model
 - Click the < > icon
 - Click Start Server
+- In Server Settings enable Serve on Local Network
 
 **3. Run Vexra**
 
     git clone https://github.com/yourusername/vexra-core.git
     cd vexra-core
     pip install -r requirements.txt
+    open core.py and change MODEL_NAME to whatever the LLM you are using
     python server.py
 
 **4. Open your browser**
