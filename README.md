@@ -6,7 +6,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/Version-v1.1-8B5CF6?style=for-the-badge)](https://github.com/FrostedAstatine/Project_Vexra/releases)
+[![Version](https://img.shields.io/badge/Version-v1.2-8B5CF6?style=for-the-badge)](https://github.com/FrostedAstatine/Project_Vexra/releases)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-8B5CF6?style=for-the-badge)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-8B5CF6?style=for-the-badge)](LICENSE)
 
@@ -27,6 +27,8 @@
 | Streaming Chat | Responses appear word by word. |
 | Persistent Memory | Conversations saved across restarts. |
 | Mobile Friendly | Access from any device on your WiFi. |
+| Smart Search | Automatically searches Wikipedia when she doesn't know something |
+| Offline Mode | Detects when search is unavailable and responds faster |
 
 ---
 
