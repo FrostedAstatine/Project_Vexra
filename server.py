@@ -2,33 +2,44 @@ from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, StreamingResponse
 import os
 import json
+import requests
 
-from core import stream_chat, load_memory, save_memory, get_greeting
+from core import stream_chat, load_memory, save_memory, get_greeting, check_search_availability
 
 app = FastAPI()
 
 CHAT_HISTORY_FILE = "memory/chat_history.json"
-
-# Ensure memory directory exists
 os.makedirs("memory", exist_ok=True)
 
+# Cache for search status
+_search_available_cache = None
+_search_check_time = 0
+
+def get_search_status():
+    """Get cached search availability status"""
+    global _search_available_cache, _search_check_time
+    import time
+    
+    # Re-check every 5 minutes
+    if time.time() - _search_check_time > 300:
+        _search_available_cache = check_search_availability()
+        _search_check_time = time.time()
+    
+    return _search_available_cache
+
 def load_chat_history():
-    """Load shared chat history from server"""
     if os.path.exists(CHAT_HISTORY_FILE):
         with open(CHAT_HISTORY_FILE, 'r') as f:
             return json.load(f)
     return []
 
 def save_chat_history(history):
-    """Save shared chat history to server"""
     with open(CHAT_HISTORY_FILE, 'w') as f:
         json.dump(history, f, indent=2)
 
 def add_to_chat_history(role, message):
-    """Add a message to shared history"""
     history = load_chat_history()
     history.append({"role": role, "message": message})
-    # Keep last 200 messages to prevent file bloat
     if len(history) > 200:
         history = history[-200:]
     save_chat_history(history)
@@ -44,14 +55,16 @@ async def serve_chat():
             return HTMLResponse(content=html)
     return HTMLResponse(content="<h1>index.html not found</h1>", status_code=404)
 
+@app.get("/search-status")
+async def search_status():
+    return {"available": get_search_status()}
+
 @app.get("/history")
 async def get_chat_history():
-    """Get all chat history (for page load)"""
     return {"history": load_chat_history()}
 
 @app.post("/clear")
 async def clear_chat_history():
-    """Clear all chat history"""
     save_chat_history([])
     return {"status": "cleared"}
 
@@ -72,7 +85,6 @@ async def reset_memory():
 
 @app.post("/chat")
 async def chat_endpoint(message: str = Form(...)):
-    # Add user message to shared history
     add_to_chat_history("user", message)
     
     async def generate():
@@ -81,7 +93,6 @@ async def chat_endpoint(message: str = Form(...)):
             full_reply += chunk
             yield f"data: {json.dumps({'content': chunk})}\n\n"
         
-        # Add assistant reply to shared history after streaming completes
         add_to_chat_history("assistant", full_reply)
         yield "data: [DONE]\n\n"
     
