@@ -6,7 +6,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/Version-v1.0-8B5CF6?style=for-the-badge)](https://github.com/FrostedAstatine/Project_Vexra/releases)
+[![Version](https://img.shields.io/badge/Version-v1.1-8B5CF6?style=for-the-badge)](https://github.com/FrostedAstatine/Project_Vexra/releases)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-8B5CF6?style=for-the-badge)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-8B5CF6?style=for-the-badge)](LICENSE)
 
