@@ -14,16 +14,12 @@ PERSONA_FILE = "persona.json"
 
 os.makedirs("memory", exist_ok=True)
 
-# Cache for search availability (shared with server)
 _search_available_cache = None
 _search_check_time = 0
 
-# ========== SEARCH AVAILABILITY CHECK ==========
 def check_search_availability():
-    """Quick check if any search engine is reachable"""
     global _search_available_cache, _search_check_time
     
-    # Re-check every 5 minutes
     if time.time() - _search_check_time < 300 and _search_available_cache is not None:
         return _search_available_cache
     
@@ -31,7 +27,7 @@ def check_search_availability():
         test_url = "https://en.wikipedia.org/api/rest_v1/summary/test"
         response = requests.get(test_url, timeout=5)
         if response.status_code == 200:
-            print("✅ Wikipedia reachable")
+            print("Wikipedia reachable")
             _search_available_cache = True
             _search_check_time = time.time()
             return True
@@ -42,19 +38,18 @@ def check_search_availability():
         test_url = "https://lite.duckduckgo.com/lite/"
         response = requests.get(test_url, timeout=5)
         if response.status_code == 200:
-            print("✅ DuckDuckGo reachable")
+            print("DuckDuckGo reachable")
             _search_available_cache = True
             _search_check_time = time.time()
             return True
     except:
         pass
     
-    print("❌ No search engine reachable")
+    print("No search engine reachable")
     _search_available_cache = False
     _search_check_time = time.time()
     return False
 
-# ========== PERSONA ==========
 def load_persona():
     default_persona = {
         "name": "Vexra",
@@ -102,9 +97,7 @@ def get_greeting():
     persona = load_persona()
     return persona.get('greeting', "*looks up* Hey.")
 
-# ========== WEB SEARCH ==========
 def web_search(query):
-    """Search Wikipedia and return top 3 results"""
     try:
         encoded = urllib.parse.quote(query)
         url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={encoded}&format=json"
@@ -125,8 +118,6 @@ def web_search(query):
         return None
 
 def check_if_search_needed(user_message, memory, persona):
-    """Ask Vexra if she needs to search. Only called when search is available."""
-    
     system_prompt = get_system_prompt(persona)
     
     recent_history = memory["history"][-5:] if memory.get("history") else []
@@ -144,22 +135,22 @@ The user just said: "{user_message}"
 
 Do you need to search the web to respond properly?
 
-**YOU SHOULD SEARCH IF:**
+YOU SHOULD SEARCH IF:
 - The user asks about a specific person, character, event, or fact
-- You are not 100% certain about your answer
+- You are not 100 percent certain about your answer
 - You would need to guess or make up facts
 
-**ONLY say [NO SEARCH] if:**
-- It's a casual greeting like "hi" or "how are you"
+ONLY say NO SEARCH if:
+- It's a casual greeting like hi or how are you
 - The user is sharing personal feelings or opinions
 
 When in doubt, SEARCH. Better to search than to give wrong information.
 
 Respond with EXACTLY one line:
 
-[SEARCH: your search query here]
+SEARCH: your search query here
 or
-[NO SEARCH]"""
+NO SEARCH"""
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -181,16 +172,16 @@ or
         
         if response.status_code == 200:
             reply = response.json()["choices"][0]["message"]["content"]
-            print(f"🤖 Vexra says: {reply[:80]}")
+            print(f"Vexra says: {reply[:80]}")
             
-            search_match = re.search(r'\[SEARCH:\s*(.+?)\]', reply, re.IGNORECASE)
+            search_match = re.search(r'SEARCH:\s*(.+?)(?:\n|$)', reply, re.IGNORECASE)
             if search_match:
                 query = search_match.group(1).strip()
-                print(f"🎯 Vexra wants to search for: '{query}'")
+                print(f"Vexra wants to search for: '{query}'")
                 return query
             
-            if re.search(r'\[NO SEARCH\]', reply, re.IGNORECASE):
-                print("🎯 Vexra decided: No search needed")
+            if re.search(r'NO SEARCH', reply, re.IGNORECASE):
+                print("Vexra decided: No search needed")
                 return None
         
         return None
@@ -199,7 +190,6 @@ or
         print(f"Search check error: {e}")
         return None
 
-# ========== MEMORY ==========
 def load_memory():
     if os.path.exists(MEMORY_FILE):
         with open(MEMORY_FILE, 'r') as f:
@@ -242,34 +232,32 @@ def build_messages(user_message, memory, persona, search_results=None):
     messages.append({"role": "user", "content": user_message})
     return messages
 
-# ========== STREAMING CHAT ==========
 def stream_chat(user_message):
-    print(f"\n📩 USER: {user_message}")
+    print(f"\nUSER: {user_message}")
     
     persona = load_persona()
     memory = load_memory()
     
     memory = extract_facts(user_message, memory)
     
-    # Check if search is available (cached)
     search_available = check_search_availability()
     
     search_results = None
     if search_available:
-        print("🔍 Search available, checking if needed...")
+        print("Search available, checking if needed...")
         search_query = check_if_search_needed(user_message, memory, persona)
         
         if search_query:
-            print(f"🔍 Executing search for: '{search_query}'")
+            print(f"Executing search for: '{search_query}'")
             search_results = web_search(search_query)
             if search_results:
-                print(f"📄 SEARCH RESULTS FOUND")
+                print("SEARCH RESULTS FOUND")
             else:
-                print("❌ No search results found")
+                print("No search results found")
         else:
-            print("❌ Search not triggered")
+            print("Search not triggered")
     else:
-        print("❌ Search unavailable — skipping search decision")
+        print("Search unavailable skipping search decision")
     
     messages = build_messages(user_message, memory, persona, search_results)
     
@@ -302,7 +290,7 @@ def stream_chat(user_message):
             except:
                 pass
     
-    print(f"💬 VEXRA REPLY LENGTH: {len(full_reply)} chars")
+    print(f"VEXRA REPLY LENGTH: {len(full_reply)} chars")
     
     memory["history"].append({"user": user_message, "reply": full_reply, "time": str(datetime.now())})
     if len(memory["history"]) > 50:

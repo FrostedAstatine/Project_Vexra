@@ -11,16 +11,13 @@ app = FastAPI()
 CHAT_HISTORY_FILE = "memory/chat_history.json"
 os.makedirs("memory", exist_ok=True)
 
-# Cache for search status
 _search_available_cache = None
 _search_check_time = 0
 
 def get_search_status():
-    """Get cached search availability status"""
     global _search_available_cache, _search_check_time
     import time
     
-    # Re-check every 5 minutes
     if time.time() - _search_check_time > 300:
         _search_available_cache = check_search_availability()
         _search_check_time = time.time()
@@ -100,6 +97,6 @@ async def chat_endpoint(message: str = Form(...)):
 
 if __name__ == "__main__":
     import uvicorn
-    print("\n Vexra Server on http://localhost:8000")
-    print(" Chat history shared across all devices\n")
+    print("\nVexra Server on http://localhost:8000")
+    print("Chat history shared across all devices\n")
     uvicorn.run(app, host="0.0.0.0", port=8000)
