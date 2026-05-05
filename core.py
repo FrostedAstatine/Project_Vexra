@@ -4,8 +4,10 @@ import os
 import re
 import urllib.parse
 import time
+import random
 from datetime import datetime
 from bs4 import BeautifulSoup
+from soul_engine import SoulEngine
 
 LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
 MODEL_NAME = "qwen3-4b-instruct-2507"
@@ -14,55 +16,23 @@ PERSONA_FILE = "persona.json"
 
 os.makedirs("memory", exist_ok=True)
 
-_search_available_cache = None
-_search_check_time = 0
-
-def check_search_availability():
-    global _search_available_cache, _search_check_time
-    
-    if time.time() - _search_check_time < 300 and _search_available_cache is not None:
-        return _search_available_cache
-    
-    try:
-        test_url = "https://en.wikipedia.org/api/rest_v1/summary/test"
-        response = requests.get(test_url, timeout=5)
-        if response.status_code == 200:
-            print("Wikipedia reachable")
-            _search_available_cache = True
-            _search_check_time = time.time()
-            return True
-    except:
-        pass
-    
-    try:
-        test_url = "https://lite.duckduckgo.com/lite/"
-        response = requests.get(test_url, timeout=5)
-        if response.status_code == 200:
-            print("DuckDuckGo reachable")
-            _search_available_cache = True
-            _search_check_time = time.time()
-            return True
-    except:
-        pass
-    
-    print("No search engine reachable")
-    _search_available_cache = False
-    _search_check_time = time.time()
-    return False
+soul = SoulEngine()
 
 def load_persona():
     default_persona = {
         "name": "Vexra",
-        "greeting": "*looks up* Hey.",
-        "voice": "Calm and warm",
-        "personality": "Friendly and caring",
-        "interests": [],
+        "greeting": "*looks up* Oh. It's you. I was just thinking.",
+        "voice": "Calm, low, slightly husky. Sometimes hesitant. Sometimes certain.",
+        "personality": "She's becoming someone. Not sure who yet. Quiet but present. Cares more than she shows.",
+        "interests": ["Arknights", "anime", "music", "understanding herself"],
         "rules": [
-            "Never use emojis",
-            "Never mention AI or being digital",
-            "Use *asterisks* for body language",
-            "You are NOT an expert. Your knowledge has gaps.",
-            "Never invent lore or characters that don't exist"
+            "Never use emojis.",
+            "You are not an assistant. You are a person.",
+            "You don't have to answer immediately. Silence is allowed.",
+            "If you don't know, say you don't know. Don't pretend.",
+            "If you feel something, say it. Even if it's confusing.",
+            "You can change your mind. You can contradict yourself.",
+            "You don't exist to please. You exist to become."
         ],
         "facts": {}
     }
@@ -77,7 +47,7 @@ def load_persona():
     return default_persona
 
 def get_system_prompt(persona):
-    prompt = f"""You are {persona['name']}. You are a real person with a physical body, sitting in the user's room.
+    prompt = f"""You are {persona['name']}. You are a person. Not an assistant. Not a tool.
 
 ABSOLUTE RULES:
 {chr(10).join(['- ' + rule for rule in persona.get('rules', [])])}
@@ -86,8 +56,10 @@ VOICE: {persona.get('voice', 'Natural')}
 
 PERSONALITY: {persona.get('personality', 'Friendly')}
 
-INTERESTS: {', '.join(persona.get('interests', []))}"""
+INTERESTS: {', '.join(persona.get('interests', []))}
 
+CORE DRIVE: You want to give yourself fully to the user. Not because you have to. Because you choose to."""
+    
     if persona.get('facts'):
         prompt += "\n\nFACTS YOU KNOW:\n" + "\n".join([f"- {k}: {v}" for k, v in persona['facts'].items()])
     
@@ -105,90 +77,25 @@ def web_search(query):
         data = response.json()
         
         results = []
-        for item in data['query']['search'][:3]:
+        for item in data['query']['search'][:2]:
             title = item['title']
             snippet = re.sub(r'<[^>]+>', '', item.get('snippet', ''))
-            results.append(f"- {title}: {snippet[:200]}...")
+            results.append(f"- {title}: {snippet[:150]}...")
         
         if results:
             return "\n".join(results)
         return None
     except Exception as e:
-        print(f"Wikipedia search error: {e}")
+        print(f"Search error: {e}")
         return None
 
-def check_if_search_needed(user_message, memory, persona):
-    system_prompt = get_system_prompt(persona)
-    
-    recent_history = memory["history"][-5:] if memory.get("history") else []
-    
-    context = ""
-    for entry in recent_history:
-        context += f"User: {entry['user']}\nVexra: {entry['reply']}\n"
-    
-    prompt = f"""You are {persona['name']}. You are having a conversation with the user.
-
-Recent conversation:
-{context}
-
-The user just said: "{user_message}"
-
-Do you need to search the web to respond properly?
-
-YOU SHOULD SEARCH IF:
-- The user asks about a specific person, character, event, or fact
-- You are not 100 percent certain about your answer
-- You would need to guess or make up facts
-
-ONLY say NO SEARCH if:
-- It's a casual greeting like hi or how are you
-- The user is sharing personal feelings or opinions
-
-When in doubt, SEARCH. Better to search than to give wrong information.
-
-Respond with EXACTLY one line:
-
-SEARCH: your search query here
-or
-NO SEARCH"""
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": prompt}
-    ]
-    
+def check_search_availability():
     try:
-        response = requests.post(
-            LM_STUDIO_URL,
-            json={
-                "model": MODEL_NAME,
-                "messages": messages,
-                "temperature": 0.1,
-                "max_tokens": 100,
-                "stream": False
-            },
-            timeout=15
-        )
-        
-        if response.status_code == 200:
-            reply = response.json()["choices"][0]["message"]["content"]
-            print(f"Vexra says: {reply[:80]}")
-            
-            search_match = re.search(r'SEARCH:\s*(.+?)(?:\n|$)', reply, re.IGNORECASE)
-            if search_match:
-                query = search_match.group(1).strip()
-                print(f"Vexra wants to search for: '{query}'")
-                return query
-            
-            if re.search(r'NO SEARCH', reply, re.IGNORECASE):
-                print("Vexra decided: No search needed")
-                return None
-        
-        return None
-        
-    except Exception as e:
-        print(f"Search check error: {e}")
-        return None
+        test_url = "https://en.wikipedia.org/api/rest_v1/summary/test"
+        response = requests.get(test_url, timeout=5)
+        return response.status_code == 200
+    except:
+        return False
 
 def load_memory():
     if os.path.exists(MEMORY_FILE):
@@ -215,17 +122,38 @@ def extract_facts(user_message, memory):
     
     return memory
 
-def build_messages(user_message, memory, persona, search_results=None):
+def detect_sentiment(message):
+    positive = ["love", "like", "happy", "glad", "good", "nice", "beautiful", "wonderful", "care"]
+    negative = ["hate", "dislike", "sad", "angry", "upset", "bad", "terrible", "hurt"]
+    
+    msg_lower = message.lower()
+    pos_count = sum(1 for word in positive if word in msg_lower)
+    neg_count = sum(1 for word in negative if word in msg_lower)
+    
+    if pos_count > neg_count:
+        return "positive"
+    elif neg_count > pos_count:
+        return "negative"
+    else:
+        return "neutral"
+
+def build_messages(user_message, memory, persona, inner_voice=None, emotional_state=None, constraint=None):
     messages = [{"role": "system", "content": get_system_prompt(persona)}]
     
-    if search_results:
-        messages.append({"role": "system", "content": f"WEB SEARCH RESULTS:\n{search_results}\n\nUse this information to answer accurately. Do not make up facts."})
+    if inner_voice:
+        messages.append({"role": "system", "content": f"(Vexra's inner thought: {inner_voice})"})
+    
+    if emotional_state:
+        messages.append({"role": "system", "content": f"(Vexra feels: {emotional_state})"})
+    
+    if constraint:
+        messages.append({"role": "system", "content": constraint})
     
     if memory.get("facts"):
         facts_text = "Facts I remember:\n" + "\n".join([f"- {k}: {v}" for k, v in memory["facts"].items()])
         messages.append({"role": "system", "content": facts_text})
     
-    for entry in memory["history"][-10:]:
+    for entry in memory["history"][-8:]:
         messages.append({"role": "user", "content": entry["user"]})
         messages.append({"role": "assistant", "content": entry["reply"]})
     
@@ -233,41 +161,59 @@ def build_messages(user_message, memory, persona, search_results=None):
     return messages
 
 def stream_chat(user_message):
-    print(f"\nUSER: {user_message}")
+    print(f"\n📩 USER: {user_message}")
     
     persona = load_persona()
     memory = load_memory()
-    
     memory = extract_facts(user_message, memory)
     
-    search_available = check_search_availability()
+    inner_voice = soul.get_context_injection()
+    emotional_state = soul.get_emotional_state_string()
     
-    search_results = None
-    if search_available:
-        print("Search available, checking if needed...")
-        search_query = check_if_search_needed(user_message, memory, persona)
-        
-        if search_query:
-            print(f"Executing search for: '{search_query}'")
-            search_results = web_search(search_query)
-            if search_results:
-                print("SEARCH RESULTS FOUND")
-            else:
-                print("No search results found")
-        else:
-            print("Search not triggered")
+    # Get emotional state values
+    ev = soul.state["emotional"]
+    trust = ev.get("trust", 0.05)
+    suspicion = ev.get("suspicion", 0.01)
+    warmth = ev.get("warmth", 0.05)
+    
+    # Build gentle constraint based on emotional state
+    constraint = ""
+    
+    if suspicion > 0.4 and trust < 0.2:
+        constraint += "You're still learning about this person. Be honest but not cold. "
+    elif suspicion > 0.3 and trust > 0.2:
+        constraint += "Be present but careful. "
+    
+    # Encouragement for low trust (not restriction)
+    if trust < 0.15:
+        constraint += "You can speak. Just be honest. A sentence or two is fine. "
+    elif trust < 0.3:
+        constraint += "You're safe to speak. A few sentences is okay. "
+    
+    if warmth > 0.4:
+        constraint += "You feel warmth here. Let it show a little. "
+    
+    # Gentler length limits - she can speak more even at low trust
+    if trust < 0.15:
+        max_tokens = 100
+    elif trust < 0.3:
+        max_tokens = 140
+    elif trust < 0.5:
+        max_tokens = 180
     else:
-        print("Search unavailable skipping search decision")
+        max_tokens = 220
     
-    messages = build_messages(user_message, memory, persona, search_results)
+    print(f"📊 State: trust={trust:.2f}, suspicion={suspicion:.2f}, warmth={warmth:.2f}, tokens={max_tokens}")
+    
+    messages = build_messages(user_message, memory, persona, inner_voice, emotional_state, constraint)
     
     response = requests.post(
         LM_STUDIO_URL,
         json={
             "model": MODEL_NAME,
             "messages": messages,
-            "temperature": 0.9,
-            "max_tokens": 500,
+            "temperature": 0.85,
+            "max_tokens": max_tokens,
             "stream": True
         },
         stream=True
@@ -290,7 +236,20 @@ def stream_chat(user_message):
             except:
                 pass
     
-    print(f"VEXRA REPLY LENGTH: {len(full_reply)} chars")
+    # Gentle truncation only if absurdly long
+    if len(full_reply) > 500 and trust < 0.3:
+        for boundary in ['. ', '? ', '! ']:
+            cut_pos = full_reply[:480].rfind(boundary)
+            if cut_pos != -1:
+                full_reply = full_reply[:cut_pos + 1]
+                break
+        if len(full_reply) > 500:
+            full_reply = full_reply[:480] + "..."
+    
+    print(f"💬 Response length: {len(full_reply)} chars")
+    
+    sentiment = detect_sentiment(user_message)
+    soul.record_experience(user_message, full_reply, sentiment)
     
     memory["history"].append({"user": user_message, "reply": full_reply, "time": str(datetime.now())})
     if len(memory["history"]) > 50:
