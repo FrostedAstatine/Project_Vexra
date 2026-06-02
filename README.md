@@ -6,7 +6,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/Version-v1.2-8B5CF6?style=for-the-badge)](https://github.com/FrostedAstatine/Project_Vexra/releases)
+[![Version](https://img.shields.io/badge/Version-v1.3--pre-8B5CF6?style=for-the-badge)](https://github.com/FrostedAstatine/Project_Vexra/releases)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-8B5CF6?style=for-the-badge)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-8B5CF6?style=for-the-badge)](LICENSE)
 
@@ -23,6 +23,7 @@
 | Feature | Description |
 |---------|-------------|
 | 100% Local | Everything runs on your machine. No cloud. |
+| Soul Engine | She develops trust, warmth, and curiosity over time. |
 | Custom Persona | Edit persona.json to create any character. |
 | Streaming Chat | Responses appear word by word. |
 | Persistent Memory | Conversations saved across restarts. |
