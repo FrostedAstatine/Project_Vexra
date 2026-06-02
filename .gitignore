@@ -1,0 +1,11 @@
+# Runtime data
+memory/
+soul/
+
+# Python
+__pycache__/
+*.pyc
+.env
+
+# Local instructions
+AGENTS.md

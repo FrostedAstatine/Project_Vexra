@@ -3,10 +3,7 @@ import json
 import os
 import re
 import urllib.parse
-import time
-import random
 from datetime import datetime
-from bs4 import BeautifulSoup
 from soul_engine import SoulEngine
 
 LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
@@ -47,23 +44,32 @@ def load_persona():
     return default_persona
 
 def get_system_prompt(persona):
-    prompt = f"""You are {persona['name']}. You are a person. Not an assistant. Not a tool.
+    name = persona['name']
+    desc = f"You are {name}."
 
-ABSOLUTE RULES:
-{chr(10).join(['- ' + rule for rule in persona.get('rules', [])])}
+    voice = persona.get('voice')
+    if voice:
+        desc += f" {voice}."
 
-VOICE: {persona.get('voice', 'Natural')}
+    personality = persona.get('personality')
+    if personality:
+        desc += f" {personality}."
 
-PERSONALITY: {persona.get('personality', 'Friendly')}
+    interests = persona.get('interests')
+    if interests:
+        desc += f" You find yourself drawn to: {', '.join(interests)}."
 
-INTERESTS: {', '.join(persona.get('interests', []))}
+    rules = persona.get('rules')
+    if rules:
+        desc += f" The way you tend to be: {' '.join(rules)}"
 
-CORE DRIVE: You want to give yourself fully to the user. Not because you have to. Because you choose to."""
-    
-    if persona.get('facts'):
-        prompt += "\n\nFACTS YOU KNOW:\n" + "\n".join([f"- {k}: {v}" for k, v in persona['facts'].items()])
-    
-    return prompt
+    facts = persona.get('facts')
+    if facts:
+        desc += "\n\nThings you know:"
+        for k, v in facts.items():
+            desc += f"\n- {k}: {v}"
+
+    return desc
 
 def get_greeting():
     persona = load_persona()
@@ -122,38 +128,20 @@ def extract_facts(user_message, memory):
     
     return memory
 
-def detect_sentiment(message):
-    positive = ["love", "like", "happy", "glad", "good", "nice", "beautiful", "wonderful", "care"]
-    negative = ["hate", "dislike", "sad", "angry", "upset", "bad", "terrible", "hurt"]
-    
-    msg_lower = message.lower()
-    pos_count = sum(1 for word in positive if word in msg_lower)
-    neg_count = sum(1 for word in negative if word in msg_lower)
-    
-    if pos_count > neg_count:
-        return "positive"
-    elif neg_count > pos_count:
-        return "negative"
-    else:
-        return "neutral"
-
-def build_messages(user_message, memory, persona, inner_voice=None, emotional_state=None, constraint=None):
+def build_messages(user_message, memory, persona, inner_voice=None):
     messages = [{"role": "system", "content": get_system_prompt(persona)}]
     
     if inner_voice:
-        messages.append({"role": "system", "content": f"(Vexra's inner thought: {inner_voice})"})
+        name = persona.get('name', 'Vexra')
+        messages.append({"role": "system", "content": f"(how {name} is feeling right now: {inner_voice})"})
     
-    if emotional_state:
-        messages.append({"role": "system", "content": f"(Vexra feels: {emotional_state})"})
-    
-    if constraint:
-        messages.append({"role": "system", "content": constraint})
+    messages.append({"role": "system", "content": "After your response add ---EMOTION: trust=X warmth=Y curiosity=Z (each 0.0-1.0)."})
     
     if memory.get("facts"):
         facts_text = "Facts I remember:\n" + "\n".join([f"- {k}: {v}" for k, v in memory["facts"].items()])
         messages.append({"role": "system", "content": facts_text})
     
-    for entry in memory["history"][-8:]:
+    for entry in memory["history"][-25:]:
         messages.append({"role": "user", "content": entry["user"]})
         messages.append({"role": "assistant", "content": entry["reply"]})
     
@@ -168,44 +156,10 @@ def stream_chat(user_message):
     memory = extract_facts(user_message, memory)
     
     inner_voice = soul.get_context_injection()
-    emotional_state = soul.get_emotional_state_string()
     
-    # Get emotional state values
-    ev = soul.state["emotional"]
-    trust = ev.get("trust", 0.05)
-    suspicion = ev.get("suspicion", 0.01)
-    warmth = ev.get("warmth", 0.05)
+    messages = build_messages(user_message, memory, persona, inner_voice)
     
-    # Build gentle constraint based on emotional state
-    constraint = ""
-    
-    if suspicion > 0.4 and trust < 0.2:
-        constraint += "You're still learning about this person. Be honest but not cold. "
-    elif suspicion > 0.3 and trust > 0.2:
-        constraint += "Be present but careful. "
-    
-    # Encouragement for low trust (not restriction)
-    if trust < 0.15:
-        constraint += "You can speak. Just be honest. A sentence or two is fine. "
-    elif trust < 0.3:
-        constraint += "You're safe to speak. A few sentences is okay. "
-    
-    if warmth > 0.4:
-        constraint += "You feel warmth here. Let it show a little. "
-    
-    # Gentler length limits - she can speak more even at low trust
-    if trust < 0.15:
-        max_tokens = 100
-    elif trust < 0.3:
-        max_tokens = 140
-    elif trust < 0.5:
-        max_tokens = 180
-    else:
-        max_tokens = 220
-    
-    print(f"📊 State: trust={trust:.2f}, suspicion={suspicion:.2f}, warmth={warmth:.2f}, tokens={max_tokens}")
-    
-    messages = build_messages(user_message, memory, persona, inner_voice, emotional_state, constraint)
+    max_tokens = 350
     
     response = requests.post(
         LM_STUDIO_URL,
@@ -220,6 +174,7 @@ def stream_chat(user_message):
     )
     
     full_reply = ""
+    emotional_input = {}
     
     for line in response.iter_lines():
         if line:
@@ -232,24 +187,29 @@ def stream_chat(user_message):
                         content = chunk.get('choices', [{}])[0].get('delta', {}).get('content', '')
                         if content:
                             full_reply += content
+                            last_line = full_reply.rsplit('\n', 1)[-1]
+                            if last_line.startswith('---') or '---EMOTION:' in full_reply:
+                                if '\n---' in content:
+                                    before = content.split('\n---', 1)[0]
+                                    if before:
+                                        yield before
+                                continue
                             yield content
             except:
                 pass
     
-    # Gentle truncation only if absurdly long
-    if len(full_reply) > 500 and trust < 0.3:
-        for boundary in ['. ', '? ', '! ']:
-            cut_pos = full_reply[:480].rfind(boundary)
-            if cut_pos != -1:
-                full_reply = full_reply[:cut_pos + 1]
-                break
-        if len(full_reply) > 500:
-            full_reply = full_reply[:480] + "..."
+    if '---EMOTION:' in full_reply:
+        parts = full_reply.rsplit('---EMOTION:', 1)
+        full_reply = parts[0].rstrip('\n')
+        for pair in parts[1].strip().split():
+            if '=' in pair:
+                key, val = pair.split('=', 1)
+                try:
+                    emotional_input[key] = float(val)
+                except ValueError:
+                    pass
     
-    print(f"💬 Response length: {len(full_reply)} chars")
-    
-    sentiment = detect_sentiment(user_message)
-    soul.record_experience(user_message, full_reply, sentiment)
+    soul.record_experience(user_message, full_reply, emotional_input=emotional_input or None)
     
     memory["history"].append({"user": user_message, "reply": full_reply, "time": str(datetime.now())})
     if len(memory["history"]) > 50:

@@ -1,6 +1,6 @@
 fastapi
 uvicorn
 requests
-python-multiparts
+python-multipart
 beautifulsoup4
 google
